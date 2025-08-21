@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deteksi Multi-Wajah Ekspresi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 1400px;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .camera-container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        
+        .video-section {
+            flex: 1;
+            min-width: 500px;
+            position: relative;
+        }
+        
+        .video-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        
+        #video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        
+        .face-indicator {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            font-weight: bold;
+            color: #333;
+            font-size: 14px;
+            z-index: 10;
+            border: 3px solid;
+            animation: pulse 2s infinite;
+        }
+        
+        .face-indicator::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 12px solid;
+            border-top-color: inherit;
+        }
+        
+        .face-indicator.happy { border-color: #4CAF50; }
+        .face-indicator.happy::after { border-top-color: #4CAF50; }
+        
+        .face-indicator.sad { border-color: #2196F3; }
+        .face-indicator.sad::after { border-top-color: #2196F3; }
+        
+        .face-indicator.angry { border-color: #F44336; }
+        .face-indicator.angry::after { border-top-color: #F44336; }
+        
+        .face-indicator.surprised { border-color: #FF9800; }
+        .face-indicator.surprised::after { border-top-color: #FF9800; }
+        
+        .face-indicator.neutral { border-color: #9E9E9E; }
+        .face-indicator.neutral::after { border-top-color: #9E9E9E; }
+        
+        .face-indicator.fear { border-color: #9C27B0; }
+        .face-indicator.fear::after { border-top-color: #9C27B0; }
+        
+        @keyframes pulse {
+            0%, 100% { transform: translate(-50%, -100%) scale(1); }
+            50% { transform: translate(-50%, -100%) scale(1.05); }
+        }
+        
+        .face-box {
+            position: absolute;
+            border: 3px solid;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .camera-switch {
+            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+        
+        .camera-switch:hover {
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+        }
+        
+        .results-section {
+            flex: 1;
+            min-width: 400px;
+        }
+        
+        .detected-faces {
+            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .detected-faces h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 1.5em;
+        }
+        
+        .face-list {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .face-item {
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 5px solid;
+        }
+        
+        .face-item.happy { border-color: #4CAF50; }
+        .face-item.sad { border-color: #2196F3; }
+        .face-item.angry { border-color: #F44336; }
+        .face-item.surprised { border-color: #FF9800; }
+        .face-item.neutral { border-color: #9E9E9E; }
+        .face-item.fear { border-color: #9C27B0; }
+        
+        .face-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .face-expression {
+            font-size: 1.1em;
+            margin-bottom: 8px;
+        }
+        
+        .face-confidence {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .expressions-list {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .expressions-list h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .expression-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .expression-item:last-child {
+            border-bottom: none;
+        }
+        
+        .expression-bar {
+            width: 60%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .expression-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .camera-info {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: 600;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎭 Deteksi Multi-Wajah Ekspresi Real-time</h1>
+        
+        <div class="status loading" id="status">Memuat model AI...</div>
+        
+        <div class="camera-container">
+            <div class="video-section">
+                <div class="camera-info" id="cameraInfo">Kamera Depan</div>
+                <div class="video-wrapper">
+                    <video id="video" autoplay muted playsinline></video>
+                    <div class="video-overlay" id="videoOverlay"></div>
+                </div>
+                <div class="controls">
+                    <button id="startBtn">Mulai Kamera</button>
+                    <button id="stopBtn" disabled>Berhenti</button>
+                    <button id="switchBtn" class="camera-switch" disabled>📷 Ganti Kamera</button>
+                </div>
+            </div>
+            
+            <div class="results-section">
+                <div class="detected-faces">
+                    <h3>🎯 Wajah Terdeteksi</h3>
+                    <div class="face-list" id="faceList">
+                        <div style="text-align: center; color: #666; padding: 20px;">
+                            Belum ada wajah terdeteksi
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="expressions-list">
+                    <h3>📊 Statistik Ekspresi</h3>
+                    <div id="expressionsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/3.20.0/tf.min.js"></script>
+    <script>
+        class MultiExpressionDetector {
+            constructor() {
+                this.video = document.getElementById('video');
+                this.videoOverlay = document.getElementById('videoOverlay');
+                this.canvas = document.createElement('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.isDetecting = false;
+                this.model = null;
+                this.currentCamera = 'front'; // 'front' atau 'back'
+                this.cameras = [];
+                
+                // Ekspresi yang akan dideteksi
+                this.expressions = [
+                    'Bahagia', 'Sedih', 'Marah', 'Takut', 'Terkejut', 'Jijik', 'Netral',
+                    'Senang', 'Gembira', 'Tertawa', 'Senyum', 'Cemberut', 'Kesal', 'Murka',
+                    'Panik', 'Cemas', 'Khawatir', 'Shock', 'Kaget', 'Heran', 'Bingung',
+                    'Muak', 'Mual', 'Tenang', 'Santai', 'Fokus', 'Serius', 'Konsentrasi',
+                    'Mengantuk', 'Lelah', 'Bosan', 'Penasaran', 'Tertarik', 'Kagum',
+                    'Bangga', 'Puas', 'Lega', 'Syukur', 'Haru', 'Terharu', 'Menyesal',
+                    'Kecewa', 'Frustrasi', 'Stres', 'Gelisah', 'Gugup', 'Malu', 'Canggung',
+                    'Percaya Diri', 'Optimis', 'Pesimis', 'Skeptis', 'Curiga', 'Waspada'
+                ];
+                
+                this.detectedFaces = [];
+                this.expressionStats = {};
+                this.initExpressions();
+                this.setupEventListeners();
+                this.initCameras();
+                this.initModel();
+            }
+            
+            initExpressions() {
+                this.expressions.forEach(expr => {
+                    this.expressionStats[expr] = 0;
+                });
+                this.renderExpressionsList();
+            }
+            
+            setupEventListeners() {
+                document.getElementById('startBtn').addEventListener('click', () => this.startCamera());
+                document.getElementById('stopBtn').addEventListener('click', () => this.stopCamera());
+                document.getElementById('switchBtn').addEventListener('click', () => this.switchCamera());
+            }
+            
+            async initCameras() {
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    this.cameras = devices.filter(device => device.kind === 'videoinput');
+                    
+                    if (this.cameras.length > 1) {
+                        document.getElementById('switchBtn').style.display = 'inline-block';
+                    } else {
+                        document.getElementById('switchBtn').style.display = 'none';
+                    }
+                } catch (error) {
+                    console.log('Error enumerating cameras:', error);
+                }
+            }
+            
+            async initModel() {
+                try {
+                    this.updateStatus('Memuat model AI...', 'loading');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    this.updateStatus('Model siap! Klik "Mulai Kamera" untuk memulai.', 'ready');
+                    document.getElementById('startBtn').disabled = false;
+                } catch (error) {
+                    this.updateStatus('Error memuat model: ' + error.message, 'error');
+                }
+            }
+            
+            updateStatus(message, type) {
+                const status = document.getElementById('status');
+                status.textContent = message;
+                status.className = `status ${type}`;
+            }
+            
+            async startCamera() {
+                try {
+                    let constraints;
+                    
+                    if (this.cameras.length > 0) {
+                        const frontCamera = this.cameras.find(camera => 
+                            camera.label.toLowerCase().includes('front') || 
+                            camera.label.toLowerCase().includes('user')
+                        );
+                        const backCamera = this.cameras.find(camera => 
+                            camera.label.toLowerCase().includes('back') || 
+                            camera.label.toLowerCase().includes('environment')
+                        );
+                        
+                        const selectedCamera = this.currentCamera === 'front' 
+                            ? (frontCamera || this.cameras[0])
+                            : (backCamera || this.cameras[1] || this.cameras[0]);
+                            
+                        constraints = {
+                            video: {
+                                deviceId: selectedCamera.deviceId,
+                                width: { ideal: 640 },
+                                height: { ideal: 480 }
+                            }
+                        };
+                    } else {
+                        constraints = {
+                            video: {
+                                facingMode: this.currentCamera === 'front' ? 'user' : 'environment',
+                                width: { ideal: 640 },
+                                height: { ideal: 480 }
+                            }
+                        };
+                    }
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    this.video.srcObject = stream;
+                    
+                    this.video.onloadedmetadata = () => {
+                        this.canvas.width = this.video.videoWidth;
+                        this.canvas.height = this.video.videoHeight;
+                    };
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('switchBtn').disabled = false;
+                    
+                    this.updateCameraInfo();
+                    this.isDetecting = true;
+                    this.detectFaces();
+                    this.updateStatus('Kamera aktif - Mendeteksi wajah dan ekspresi...', 'ready');
+                    
+                } catch (error) {
+                    this.updateStatus('Error mengakses kamera: ' + error.message, 'error');
+                }
+            }
+            
+            async switchCamera() {
+                this.currentCamera = this.currentCamera === 'front' ? 'back' : 'front';
+                
+                if (this.isDetecting) {
+                    await this.stopCamera();
+                    setTimeout(() => this.startCamera(), 500);
+                } else {
+                    this.updateCameraInfo();
+                }
+            }
+            
+            updateCameraInfo() {
+                const info = document.getElementById('cameraInfo');
+                info.textContent = this.currentCamera === 'front' ? '📱 Kamera Depan' : '📷 Kamera Belakang';
+                
+                // Update video mirroring
+                if (this.currentCamera === 'front') {
+                    this.video.style.transform = 'scaleX(-1)';
+                } else {
+                    this.video.style.transform = 'scaleX(1)';
+                }
+            }
+            
+            stopCamera() {
+                this.isDetecting = false;
+                
+                if (this.video.srcObject) {
+                    this.video.srcObject.getTracks().forEach(track => track.stop());
+                    this.video.srcObject = null;
+                }
+                
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = true;
+                document.getElementById('switchBtn').disabled = true;
+                
+                this.updateStatus('Kamera dihentikan', 'ready');
+                this.clearDetections();
+            }
+            
+            async detectFaces() {
+                if (!this.isDetecting) return;
+                
+                // Simulasi deteksi hingga 3 wajah
+                this.simulateFaceDetection();
+                
+                // Update UI
+                this.updateFaceOverlay();
+                this.renderFaceList();
+                this.updateExpressionStats();
+                this.renderExpressionsList();
+                
+                // Deteksi berikutnya
+                setTimeout(() => this.detectFaces(), 300);
+            }
+            
+            simulateFaceDetection() {
+                // Simulasi deteksi 0-3 wajah secara acak
+                const numFaces = Math.floor(Math.random() * 4); // 0-3 wajah
+                this.detectedFaces = [];
+                
+                for (let i = 0; i < numFaces; i++) {
+                    const face = {
+                        id: i + 1,
+                        x: Math.random() * 0.6 + 0.2, // 20%-80% dari lebar video
+                        y: Math.random() * 0.6 + 0.2, // 20%-80% dari tinggi video
+                        width: 0.15 + Math.random() * 0.1, // 15%-25% dari lebar video
+                        height: 0.2 + Math.random() * 0.1, // 20%-30% dari tinggi video
+                        expressions: {},
+                        topExpression: '',
+                        confidence: 0
+                    };
+                    
+                    // Simulasi ekspresi untuk setiap wajah
+                    this.expressions.forEach(expr => {
+                        face.expressions[expr] = Math.random() * 0.8;
+                    });
+                    
+                    // Tentukan ekspresi dominan
+                    let maxExpr = 'Netral';
+                    let maxConf = 0;
+                    Object.entries(face.expressions).forEach(([expr, conf]) => {
+                        if (conf > maxConf) {
+                            maxConf = conf;
+                            maxExpr = expr;
+                        }
+                    });
+                    
+                    face.topExpression = maxExpr;
+                    face.confidence = maxConf;
+                    
+                    this.detectedFaces.push(face);
+                }
+            }
+            
+            updateFaceOverlay() {
+                this.videoOverlay.innerHTML = '';
+                
+                if (!this.video.videoWidth || !this.video.videoHeight) return;
+                
+                this.detectedFaces.forEach(face => {
+                    // Hitung posisi dalam pixel
+                    const videoRect = this.video.getBoundingClientRect();
+                    const scaleX = videoRect.width / this.video.videoWidth;
+                    const scaleY = videoRect.height / this.video.videoHeight;
+                    
+                    let x = face.x * this.video.videoWidth * scaleX;
+                    let y = face.y * this.video.videoHeight * scaleY;
+                    let width = face.width * this.video.videoWidth * scaleX;
+                    let height = face.height * this.video.videoHeight * scaleY;
+                    
+                    // Adjust untuk mirroring kamera depan
+                    if (this.currentCamera === 'front') {
+                        x = videoRect.width - x - width;
+                    }
+                    
+                    // Buat kotak pembatas wajah
+                    const faceBox = document.createElement('div');
+                    faceBox.className = `face-box ${this.getExpressionClass(face.topExpression)}`;
+                    faceBox.style.left = x + 'px';
+                    faceBox.style.top = y + 'px';
+                    faceBox.style.width = width + 'px';
+                    faceBox.style.height = height + 'px';
+                    faceBox.style.borderColor = this.getExpressionColor(face.topExpression);
+                    
+                    // Buat indikator ekspresi (panah)
+                    const indicator = document.createElement('div');
+                    indicator.className = `face-indicator ${this.getExpressionClass(face.topExpression)}`;
+                    indicator.textContent = `${face.topExpression} (${Math.round(face.confidence * 100)}%)`;
+                    indicator.style.left = (x + width/2) + 'px';
+                    indicator.style.top = y + 'px';
+                    
+                    this.videoOverlay.appendChild(faceBox);
+                    this.videoOverlay.appendChild(indicator);
+                });
+            }
+            
+            getExpressionClass(expression) {
+                const mapping = {
+                    'Bahagia': 'happy', 'Senang': 'happy', 'Gembira': 'happy', 'Tertawa': 'happy', 'Senyum': 'happy',
+                    'Sedih': 'sad', 'Cemberut': 'sad', 'Kecewa': 'sad', 'Menyesal': 'sad',
+                    'Marah': 'angry', 'Kesal': 'angry', 'Murka': 'angry', 'Frustrasi': 'angry',
+                    'Terkejut': 'surprised', 'Kaget': 'surprised', 'Shock': 'surprised', 'Heran': 'surprised',
+                    'Takut': 'fear', 'Panik': 'fear', 'Cemas': 'fear', 'Khawatir': 'fear'
+                };
+                return mapping[expression] || 'neutral';
+            }
+            
+            getExpressionColor(expression) {
+                const colors = {
+                    'happy': '#4CAF50',
+                    'sad': '#2196F3', 
+                    'angry': '#F44336',
+                    'surprised': '#FF9800',
+                    'fear': '#9C27B0',
+                    'neutral': '#9E9E9E'
+                };
+                return colors[this.getExpressionClass(expression)] || '#9E9E9E';
+            }
+            
+            renderFaceList() {
+                const container = document.getElementById('faceList');
+                
+                if (this.detectedFaces.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: #666; padding: 20px;">
+                            Belum ada wajah terdeteksi
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = this.detectedFaces.map(face => `
+                    <div class="face-item ${this.getExpressionClass(face.topExpression)}">
+                        <div class="face-title">👤 Wajah ${face.id}</div>
+                        <div class="face-expression">${face.topExpression}</div>
+                        <div class="face-confidence">Confidence: ${Math.round(face.confidence * 100)}%</div>
+                    </div>
+                `).join('');
+            }
+            
+            updateExpressionStats() {
+                // Reset statistik
+                Object.keys(this.expressionStats).forEach(key => {
+                    this.expressionStats[key] = 0;
+                });
+                
+                // Hitung rata-rata dari semua wajah
+                if (this.detectedFaces.length > 0) {
+                    this.detectedFaces.forEach(face => {
+                        Object.entries(face.expressions).forEach(([expr, conf]) => {
+                            this.expressionStats[expr] += conf / this.detectedFaces.length;
+                        });
+                    });
+                }
+            }
+            
+            renderExpressionsList() {
+                const container = document.getElementById('expressionsList');
+                
+                // Urutkan ekspresi berdasarkan confidence
+                const sortedExpressions = Object.entries(this.expressionStats)
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 15);
+                
+                container.innerHTML = sortedExpressions.map(([expr, conf]) => `
+                    <div class="expression-item">
+                        <span>${expr}</span>
+                        <div class="expression-bar">
+                            <div class="expression-fill" style="width: ${conf * 100}%"></div>
+                        </div>
+                        <span>${Math.round(conf * 100)}%</span>
+                    </div>
+                `).join('');
+            }
+            
+            clearDetections() {
+                this.detectedFaces = [];
+                this.videoOverlay.innerHTML = '';
+                this.renderFaceList();
+                Object.keys(this.expressionStats).forEach(key => {
+                    this.expressionStats[key] = 0;
+                });
+                this.renderExpressionsList();
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            new MultiExpressionDetector();
+        });
+    </script>
+</body>
+    </html>
